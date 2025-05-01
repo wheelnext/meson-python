@@ -45,8 +45,10 @@ import packaging.version
 import pyproject_metadata
 
 from variantlib.api import set_variant_metadata, validate_variant
+from variantlib.constants import METADATA_ALL_HEADERS
 from variantlib.models.variant import VariantProperty, VariantDescription
 from variantlib.loader import PluginLoader
+from variantlib.pyproject_toml import VariantPyProjectToml
 
 import mesonpy._compat
 import mesonpy._rpath
@@ -315,12 +317,14 @@ class _WheelBuilder():
         limited_api: bool,
         allow_windows_shared_libs: bool,
         variant: Optional[VariantDescription],
+        variant_pyproject_toml: Optional[VariantPyProjectToml],
     ) -> None:
         self._metadata = metadata
         self._manifest = manifest
         self._limited_api = limited_api
         self._allow_windows_shared_libs = allow_windows_shared_libs
         self._variant = variant
+        self._variant_pyproject_toml = variant_pyproject_toml
 
     @property
     def _has_internal_libs(self) -> bool:
@@ -473,11 +477,10 @@ class _WheelBuilder():
         if self._variant is not None:
             # hack to avoid forking pyproject-metadata
             import pyproject_metadata.constants as c
-            c.KNOWN_METADATA_FIELDS.add('variant')
-            c.KNOWN_METADATA_FIELDS.add('variant-hash')
-            c.KNOWN_METADATA_FIELDS.add('variant-provider')
+            for header in METADATA_ALL_HEADERS:
+                c.KNOWN_METADATA_FIELDS.add(header.lower())
 
-            set_variant_metadata(metadata, self._variant)
+            set_variant_metadata(metadata, self._variant, self._variant_pyproject_toml)
 
         whl.writestr(f'{self._distinfo_dir}/METADATA', bytes(metadata))
         whl.writestr(f'{self._distinfo_dir}/WHEEL', self.wheel)
@@ -682,12 +685,11 @@ class Project():
         build_dir: Path,
         meson_args: Optional[MesonArgs] = None,
         editable_verbose: bool = False,
-        variant: Optional[VariantDescription] = None,
+        variant_names: list[str] = None,
     ) -> None:
         self._source_dir = pathlib.Path(source_dir).absolute()
         self._build_dir = pathlib.Path(build_dir).absolute()
         self._editable_verbose = editable_verbose
-        self._variant = variant
         self._meson_native_file = self._build_dir / 'meson-python-native-file.ini'
         self._meson_cross_file = self._build_dir / 'meson-python-cross-file.ini'
         self._meson_args: MesonArgs = collections.defaultdict(list)
@@ -772,6 +774,39 @@ class Project():
         # to be created as late as possible or deleted if something
         # goes wrong during setup.
         reconfigure = self._build_dir.joinpath('meson-private/coredata.dat').is_file()
+
+        # variants
+        self._variant = None
+        self._variant_pyproject_toml = None
+        if variant_names:
+            loader = PluginLoader()
+            self._variant_pyproject_toml = VariantPyProjectToml(pyproject)
+            for vprop in variant_names:
+                provider_info = self._variant_pyproject_toml.providers.get(vprop.namespace)
+                if provider_info is None:
+                    raise ConfigError(f'Provider for namespace {vprop.namespace} missing in pyproject.toml')
+                loader.load_plugin(provider_info.plugin_api)
+
+            self._variant = VariantDescription(variant_names) if variant_names else None
+            variant_valid = validate_variant(self._variant, plugin_loader=loader)
+            if variant_valid.invalid_properties:
+                raise ConfigError(
+                    "The following variant properties are invalid: "
+                    f"{' '.join(sorted(x.to_str() for x in variant_valid.invalid_properties))}")
+            if variant_valid.unknown_properties:
+                raise ConfigError(
+                    "The following variant properties are unknown (no installed "
+                    "plugin claims the namespace): "
+                    f"{' '.join(sorted(x.to_str() for x in variant_valid.unknown_properties))}")
+
+            build_setup = loader.get_build_setup(self._variant)
+            for build_var in ("cflags", "cxxflags", "cuflags", "objcflags", "fflags", "dflags",
+                              "valaflags", "rustflags", "cythonflags", "ldflags"):
+                if build_var in build_setup:
+                    os.environ[build_var.upper()] = (
+                        " ".join((os.environ.get(build_var.upper(), ""),
+                                  *build_setup[build_var]))
+                    )
 
         # run meson setup
         self._configure(reconfigure=reconfigure)
@@ -1041,13 +1076,13 @@ class Project():
     def wheel(self, directory: Path) -> pathlib.Path:
         """Generates a wheel in the specified directory."""
         self.build()
-        builder = _WheelBuilder(self._metadata, self._manifest, self._limited_api, self._allow_windows_shared_libs, self._variant)
+        builder = _WheelBuilder(self._metadata, self._manifest, self._limited_api, self._allow_windows_shared_libs, self._variant, self._variant_pyproject_toml)
         return builder.build(directory)
 
     def editable(self, directory: Path) -> pathlib.Path:
         """Generates an editable wheel in the specified directory."""
         self.build()
-        builder = _EditableWheelBuilder(self._metadata, self._manifest, self._limited_api, self._allow_windows_shared_libs, self._variant)
+        builder = _EditableWheelBuilder(self._metadata, self._manifest, self._limited_api, self._allow_windows_shared_libs, self._variant, self._variant_pyproject_toml)
         return builder.build(directory, self._source_dir, self._build_dir, self._build_command, self._editable_verbose)
 
 
@@ -1063,28 +1098,6 @@ def _project(config_settings: Optional[Dict[Any, Any]] = None) -> Iterator[Proje
     variants = settings.get('variant', [])
     variant_names = settings.get('variant-name', []) + variants
 
-    variant_desc = VariantDescription(variant_names) if variant_names else None
-    if variant_desc is not None:
-        variant_valid = validate_variant(variant_desc)
-        if variant_valid.invalid_properties:
-            raise ConfigError(
-                "The following variant properties are invalid: "
-                f"{' '.join(sorted(x.to_str() for x in variant_valid.invalid_properties))}")
-        if variant_valid.unknown_properties:
-            raise ConfigError(
-                "The following variant properties are unknown (no installed "
-                "plugin claims the namespace): "
-                f"{' '.join(sorted(x.to_str() for x in variant_valid.unknown_properties))}")
-
-        build_setup = PluginLoader.get_build_setup(variant_desc)
-        for build_var in ("cflags", "cxxflags", "cuflags", "objcflags", "fflags", "dflags",
-                          "valaflags", "rustflags", "cythonflags", "ldflags"):
-            if build_var in build_setup:
-                os.environ[build_var.upper()] = (
-                    " ".join((os.environ.get(build_var.upper(), ""),
-                              *build_setup[build_var]))
-                )
-
     if variants:
         meson_args.setdefault('setup', [])
         meson_args['setup'].append(f'-Dvariant={[x.to_str() for x in variants]!r}')
@@ -1092,7 +1105,22 @@ def _project(config_settings: Optional[Dict[Any, Any]] = None) -> Iterator[Proje
     with contextlib.ExitStack() as ctx:
         if build_dir is None:
             build_dir = ctx.enter_context(tempfile.TemporaryDirectory(prefix='.mesonpy-', dir=source_dir))
-        yield Project(source_dir, build_dir, meson_args, editable_verbose, variant_desc)
+        yield Project(source_dir, build_dir, meson_args, editable_verbose, variant_names)
+
+
+def get_variant_requires(config_settings: Optional[Dict[Any, Any]] = None) -> set[str]:
+    settings = _validate_config_settings(config_settings or {})
+    variant_names = settings.get('variant', []) + settings.get('variant-name', [])
+
+    requires = set()
+    if variant_names:
+        pyproject = VariantPyProjectToml.from_path(pathlib.Path('pyproject.toml'))
+        for vprop in variant_names:
+            provider_info = pyproject.providers.get(vprop.namespace)
+            if provider_info is None:
+                raise ConfigError(f'Provider for namespace {vprop.namespace} missing in pyproject.toml')
+            requires.update(provider_info.requires)
+    return requires
 
 
 def _parse_version_string(string: str) -> Tuple[int, ...]:
@@ -1200,6 +1228,8 @@ def get_requires_for_build_wheel(config_settings: Optional[Dict[str, str]] = Non
 
     if sys.platform.startswith('linux') and not shutil.which('patchelf'):
         dependencies.append('patchelf >= 0.11.0')
+
+    dependencies.extend(get_variant_requires(config_settings))
 
     return dependencies
 
