@@ -781,10 +781,10 @@ class Project():
         if variant_names:
             loader = PluginLoader()
             self._variant_pyproject_toml = VariantPyProjectToml(pyproject)
-            for vprop in variant_names:
-                provider_info = self._variant_pyproject_toml.providers.get(vprop.namespace)
+            for namespace in set(vprop.namespace for vprop in variant_names):
+                provider_info = self._variant_pyproject_toml.providers.get(namespace)
                 if provider_info is None:
-                    raise ConfigError(f'Provider for namespace {vprop.namespace} missing in pyproject.toml')
+                    raise ConfigError(f'Provider for namespace {namespace} missing in pyproject.toml')
                 loader.load_plugin(provider_info.plugin_api)
 
             self._variant = VariantDescription(variant_names) if variant_names else None
@@ -1115,10 +1115,10 @@ def get_variant_requires(config_settings: Optional[Dict[Any, Any]] = None) -> se
     requires = set()
     if variant_names:
         pyproject = VariantPyProjectToml.from_path(pathlib.Path('pyproject.toml'))
-        for vprop in variant_names:
-            provider_info = pyproject.providers.get(vprop.namespace)
+        for namespace in set(vprop.namespace for vprop in variant_names):
+            provider_info = pyproject.providers.get(namespace)
             if provider_info is None:
-                raise ConfigError(f'Provider for namespace {vprop.namespace} missing in pyproject.toml')
+                raise ConfigError(f'Provider for namespace {namespace} missing in pyproject.toml')
             requires.update(provider_info.requires)
     return requires
 
