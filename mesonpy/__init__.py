@@ -47,7 +47,7 @@ import pyproject_metadata
 from variantlib.api import set_variant_metadata, validate_variant
 from variantlib.constants import METADATA_ALL_HEADERS
 from variantlib.models.variant import VariantProperty, VariantDescription
-from variantlib.loader import PluginLoader
+from variantlib.plugins.loader import ManualPluginLoader
 from variantlib.pyproject_toml import VariantPyProjectToml
 
 import mesonpy._compat
@@ -779,8 +779,8 @@ class Project():
         self._variant = None
         self._variant_pyproject_toml = None
         if variant_names:
-            loader = PluginLoader()
             self._variant_pyproject_toml = VariantPyProjectToml(pyproject)
+            loader = ManualPluginLoader()
             for namespace in set(vprop.namespace for vprop in variant_names):
                 provider_info = self._variant_pyproject_toml.providers.get(namespace)
                 if provider_info is None:
