@@ -1112,15 +1112,14 @@ def get_variant_requires(config_settings: Optional[Dict[Any, Any]] = None) -> se
     settings = _validate_config_settings(config_settings or {})
     variant_names = settings.get('variant', []) + settings.get('variant-name', [])
 
-    requires = set()
     if variant_names:
         pyproject = VariantPyProjectToml.from_path(pathlib.Path('pyproject.toml'))
-        for namespace in set(vprop.namespace for vprop in variant_names):
-            provider_info = pyproject.providers.get(namespace)
-            if provider_info is None:
-                raise ConfigError(f'Provider for namespace {namespace} missing in pyproject.toml')
-            requires.update(provider_info.requires)
-    return requires
+        namespaces = set(vprop.namespace for vprop in variant_names)
+        try:
+            return pyproject.get_provider_requires(namespaces)
+        except KeyError as key_error:
+            raise ConfigError(f'Provider for namespace {key_error} missing in pyproject.toml')
+    return set()
 
 
 def _parse_version_string(string: str) -> Tuple[int, ...]:
