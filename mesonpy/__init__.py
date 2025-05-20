@@ -47,7 +47,7 @@ import pyproject_metadata
 from variantlib.api import set_variant_metadata, validate_variant
 from variantlib.constants import METADATA_ALL_HEADERS
 from variantlib.models.variant import VariantProperty, VariantDescription
-from variantlib.plugins.loader import ManualPluginLoader
+from variantlib.plugins.loader import PluginLoader
 from variantlib.pyproject_toml import VariantPyProjectToml
 
 import mesonpy._compat
@@ -780,15 +780,8 @@ class Project():
         self._variant_pyproject_toml = None
         if variant_names:
             self._variant_pyproject_toml = VariantPyProjectToml(pyproject)
-            loader = ManualPluginLoader()
-            for namespace in set(vprop.namespace for vprop in variant_names):
-                provider_info = self._variant_pyproject_toml.providers.get(namespace)
-                if provider_info is None:
-                    raise ConfigError(f'Provider for namespace {namespace} missing in pyproject.toml')
-                loader.load_plugin(provider_info.plugin_api)
-
             self._variant = VariantDescription(variant_names) if variant_names else None
-            variant_valid = validate_variant(self._variant, plugin_loader=loader)
+            variant_valid = validate_variant(self._variant, metadata=self._variant_pyproject_toml, use_auto_install=False)
             if variant_valid.invalid_properties:
                 raise ConfigError(
                     "The following variant properties are invalid: "
@@ -799,14 +792,15 @@ class Project():
                     "plugin claims the namespace): "
                     f"{' '.join(sorted(x.to_str() for x in variant_valid.unknown_properties))}")
 
-            build_setup = loader.get_build_setup(self._variant)
-            for build_var in ("cflags", "cxxflags", "cuflags", "objcflags", "fflags", "dflags",
-                              "valaflags", "rustflags", "cythonflags", "ldflags"):
-                if build_var in build_setup:
-                    os.environ[build_var.upper()] = (
-                        " ".join((os.environ.get(build_var.upper(), ""),
-                                  *build_setup[build_var]))
-                    )
+            with PluginLoader(self._variant_pyproject_toml, use_auto_install=False) as loader:
+                build_setup = loader.get_build_setup(self._variant)
+                for build_var in ("cflags", "cxxflags", "cuflags", "objcflags", "fflags", "dflags",
+                                  "valaflags", "rustflags", "cythonflags", "ldflags"):
+                    if build_var in build_setup:
+                        os.environ[build_var.upper()] = (
+                            " ".join((os.environ.get(build_var.upper(), ""),
+                                      *build_setup[build_var]))
+                        )
 
         # run meson setup
         self._configure(reconfigure=reconfigure)
