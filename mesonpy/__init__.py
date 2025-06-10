@@ -473,14 +473,12 @@ class _WheelBuilder():
         # add metadata
         metadata = self._metadata.as_rfc822()
 
-        # inject variant metadata
+        whl.writestr(f'{self._distinfo_dir}/METADATA', bytes(metadata))
+        whl.writestr(f'{self._distinfo_dir}/WHEEL', self.wheel)
         if self._variant is not None:
             whl.writestr(
                 f'{self._distinfo_dir}/{VARIANT_DIST_INFO_FILENAME}',
                 make_variant_dist_info(self._variant, self._variant_pyproject_toml))
-
-        whl.writestr(f'{self._distinfo_dir}/METADATA', bytes(metadata))
-        whl.writestr(f'{self._distinfo_dir}/WHEEL', self.wheel)
         if self.entrypoints_txt:
             whl.writestr(f'{self._distinfo_dir}/entry_points.txt', self.entrypoints_txt)
 
