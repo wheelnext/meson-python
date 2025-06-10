@@ -44,8 +44,8 @@ import packaging.utils
 import packaging.version
 import pyproject_metadata
 
-from variantlib.api import set_variant_metadata, validate_variant
-from variantlib.constants import METADATA_ALL_HEADERS
+from variantlib.api import make_variant_dist_info, validate_variant
+from variantlib.constants import VARIANT_DIST_INFO_FILENAME
 from variantlib.models.variant import VariantProperty, VariantDescription
 from variantlib.plugins.loader import PluginLoader
 from variantlib.pyproject_toml import VariantPyProjectToml
@@ -475,12 +475,9 @@ class _WheelBuilder():
 
         # inject variant metadata
         if self._variant is not None:
-            # hack to avoid forking pyproject-metadata
-            import pyproject_metadata.constants as c
-            for header in METADATA_ALL_HEADERS:
-                c.KNOWN_METADATA_FIELDS.add(header.lower())
-
-            set_variant_metadata(metadata, self._variant, self._variant_pyproject_toml)
+            whl.writestr(
+                f'{self._distinfo_dir}/{VARIANT_DIST_INFO_FILENAME}',
+                make_variant_dist_info(self._variant, self._variant_pyproject_toml))
 
         whl.writestr(f'{self._distinfo_dir}/METADATA', bytes(metadata))
         whl.writestr(f'{self._distinfo_dir}/WHEEL', self.wheel)
