@@ -776,7 +776,7 @@ class Project():
         if variant_names:
             self._variant_pyproject_toml = VariantPyProjectToml(pyproject)
             self._variant = VariantDescription(variant_names) if variant_names else None
-            variant_valid = validate_variant(self._variant, metadata=self._variant_pyproject_toml, use_auto_install=False)
+            variant_valid = validate_variant(self._variant, self._variant_pyproject_toml, use_auto_install=False)
             if variant_valid.invalid_properties:
                 raise ConfigError(
                     "The following variant properties are invalid: "
