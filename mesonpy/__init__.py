@@ -318,6 +318,7 @@ class _WheelBuilder():
         allow_windows_shared_libs: bool,
         variant: Optional[VariantDescription],
         variant_pyproject_toml: Optional[VariantPyProjectToml],
+        variant_label: str | None,
     ) -> None:
         self._metadata = metadata
         self._manifest = manifest
@@ -325,6 +326,7 @@ class _WheelBuilder():
         self._allow_windows_shared_libs = allow_windows_shared_libs
         self._variant = variant
         self._variant_pyproject_toml = variant_pyproject_toml
+        self._variant_label = variant_label
 
     @property
     def _has_internal_libs(self) -> bool:
@@ -363,17 +365,10 @@ class _WheelBuilder():
         """Wheel name, this includes the basename and tag."""
         name = f'{self._metadata.distribution_name}-{self._metadata.version}-{self.tag}'
         if self._variant is not None:
-            name += f'-{self._variant.hexdigest}'
-            # variant label API on hold, see:
-            # https://github.com/wheelnext/variantlib/pull/12#issuecomment-2781618773
-            if False:
-                labels = PluginLoader().get_variant_labels(self._variant)
-                for numlabels in range(len(labels), 0, -1):
-                    long_name = "+".join((name, *labels[:numlabels]))
-                    # if labels would give us filename that's longer than 128
-                    # characters (124 + .whl), strip them
-                    if len(long_name) < 124:
-                        return long_name
+            if self._variant_label is not None:
+                name += f'-{self._variant_label}'
+            else:
+                name += f'-{self._variant.hexdigest}'
         return name
 
     @property
@@ -643,6 +638,7 @@ def _validate_config_settings(config_settings: Dict[str, Any]) -> Dict[str, Any]
         'install-args': _string_or_strings,
         'variant': _variant_names,
         'variant-name': _variant_names,
+        'variant-label': _string,
     }
     assert all(f'{name}-args' in options for name in _MESON_ARGS_KEYS)
 
@@ -681,6 +677,7 @@ class Project():
         meson_args: Optional[MesonArgs] = None,
         editable_verbose: bool = False,
         variant_names: list[str] = None,
+        variant_label: str | None = None,
     ) -> None:
         self._source_dir = pathlib.Path(source_dir).absolute()
         self._build_dir = pathlib.Path(build_dir).absolute()
@@ -689,6 +686,7 @@ class Project():
         self._meson_cross_file = self._build_dir / 'meson-python-cross-file.ini'
         self._meson_args: MesonArgs = collections.defaultdict(list)
         self._limited_api = False
+        self._variant_label = variant_label
 
         # load pyproject.toml
         pyproject = tomllib.loads(self._source_dir.joinpath('pyproject.toml').read_text(encoding='utf-8'))
@@ -1065,13 +1063,13 @@ class Project():
     def wheel(self, directory: Path) -> pathlib.Path:
         """Generates a wheel in the specified directory."""
         self.build()
-        builder = _WheelBuilder(self._metadata, self._manifest, self._limited_api, self._allow_windows_shared_libs, self._variant, self._variant_pyproject_toml)
+        builder = _WheelBuilder(self._metadata, self._manifest, self._limited_api, self._allow_windows_shared_libs, self._variant, self._variant_pyproject_toml, self._variant_label)
         return builder.build(directory)
 
     def editable(self, directory: Path) -> pathlib.Path:
         """Generates an editable wheel in the specified directory."""
         self.build()
-        builder = _EditableWheelBuilder(self._metadata, self._manifest, self._limited_api, self._allow_windows_shared_libs, self._variant, self._variant_pyproject_toml)
+        builder = _EditableWheelBuilder(self._metadata, self._manifest, self._limited_api, self._allow_windows_shared_libs, self._variant, self._variant_pyproject_toml, self._variant_label)
         return builder.build(directory, self._source_dir, self._build_dir, self._build_command, self._editable_verbose)
 
 
@@ -1086,6 +1084,7 @@ def _project(config_settings: Optional[Dict[Any, Any]] = None) -> Iterator[Proje
     editable_verbose = bool(settings.get('editable-verbose'))
     variants = settings.get('variant', [])
     variant_names = settings.get('variant-name', []) + variants
+    variant_label = settings.get('variant-label', None)
 
     if variants:
         meson_args.setdefault('setup', [])
@@ -1094,7 +1093,7 @@ def _project(config_settings: Optional[Dict[Any, Any]] = None) -> Iterator[Proje
     with contextlib.ExitStack() as ctx:
         if build_dir is None:
             build_dir = ctx.enter_context(tempfile.TemporaryDirectory(prefix='.mesonpy-', dir=source_dir))
-        yield Project(source_dir, build_dir, meson_args, editable_verbose, variant_names)
+        yield Project(source_dir, build_dir, meson_args, editable_verbose, variant_names, variant_label)
 
 
 def get_variant_requires(config_settings: Optional[Dict[Any, Any]] = None) -> set[str]:
