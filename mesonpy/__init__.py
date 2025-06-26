@@ -776,7 +776,7 @@ class Project():
         if variant_names:
             self._variant_pyproject_toml = VariantPyProjectToml(pyproject)
             self._variant = VariantDescription(variant_names) if variant_names else None
-            variant_valid = validate_variant(self._variant, self._variant_pyproject_toml, use_auto_install=False)
+            variant_valid = validate_variant(self._variant, self._variant_pyproject_toml)
             if variant_valid.invalid_properties:
                 raise ConfigError(
                     "The following variant properties are invalid: "
@@ -787,7 +787,7 @@ class Project():
                     "plugin claims the namespace): "
                     f"{' '.join(sorted(x.to_str() for x in variant_valid.unknown_properties))}")
 
-            with PluginLoader(self._variant_pyproject_toml, use_auto_install=False) as loader:
+            with PluginLoader(self._variant_pyproject_toml) as loader:
                 build_setup = loader.get_build_setup(self._variant)
                 for build_var in ("cflags", "cxxflags", "cuflags", "objcflags", "fflags", "dflags",
                                   "valaflags", "rustflags", "cythonflags", "ldflags"):
