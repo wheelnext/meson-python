@@ -641,6 +641,7 @@ def _validate_config_settings(config_settings: Dict[str, Any]) -> Dict[str, Any]
         'variant': _variant_names,
         'variant-name': _variant_names,
         'variant-label': _string,
+        'null-variant': _bool,
     }
     assert all(f'{name}-args' in options for name in _MESON_ARGS_KEYS)
 
@@ -666,6 +667,13 @@ def _validate_config_settings(config_settings: Dict[str, Any]) -> Dict[str, Any]
         if alt in config:
             config[key] = config[alt]
 
+    # Variant-related setting checks.
+    if 'null-variant' in config:
+        if 'variant' in config or 'variant-name' in config:
+            raise ConfigError(f'Option "null-variant" is mutually exclusive with "variant" and "variant-name"')
+        if 'variant-label' in config:
+            raise ConfigError(f'Option "null-variant" is mutually exclusive with "variant-label"')
+
     return config
 
 
@@ -678,7 +686,7 @@ class Project():
         build_dir: Path,
         meson_args: Optional[MesonArgs] = None,
         editable_verbose: bool = False,
-        variant_names: list[str] = None,
+        variant_desc: VariantDescription | None = None,
         variant_label: str | None = None,
     ) -> None:
         self._source_dir = pathlib.Path(source_dir).absolute()
@@ -773,9 +781,9 @@ class Project():
         # variants
         self._variant = None
         self._variant_pyproject_toml = None
-        if variant_names:
+        if variant_desc is not None:
             self._variant_pyproject_toml = VariantPyProjectToml(pyproject)
-            self._variant = VariantDescription(variant_names) if variant_names else None
+            self._variant = variant_desc
             variant_valid = validate_variant(self._variant, self._variant_pyproject_toml)
             if variant_valid.invalid_properties:
                 raise ConfigError(
@@ -1086,16 +1094,23 @@ def _project(config_settings: Optional[Dict[Any, Any]] = None) -> Iterator[Proje
     editable_verbose = bool(settings.get('editable-verbose'))
     variants = settings.get('variant', [])
     variant_names = settings.get('variant-name', []) + variants
+    null_variant = settings.get('null-variant', False)
     variant_label = settings.get('variant-label', None)
 
     if variants:
         meson_args.setdefault('setup', [])
         meson_args['setup'].append(f'-Dvariant={[x.to_str() for x in variants]!r}')
 
+    variant_desc: VariantDescription | None = None
+    if variant_names:
+        variant_desc = VariantDescription(variant_names)
+    elif null_variant:
+        variant_desc = VariantDescription([])
+
     with contextlib.ExitStack() as ctx:
         if build_dir is None:
             build_dir = ctx.enter_context(tempfile.TemporaryDirectory(prefix='.mesonpy-', dir=source_dir))
-        yield Project(source_dir, build_dir, meson_args, editable_verbose, variant_names, variant_label)
+        yield Project(source_dir, build_dir, meson_args, editable_verbose, variant_desc, variant_label)
 
 
 def get_variant_requires(config_settings: Optional[Dict[Any, Any]] = None) -> set[str]:
