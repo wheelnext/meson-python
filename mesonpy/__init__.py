@@ -795,16 +795,6 @@ class Project():
                     "plugin claims the namespace): "
                     f"{' '.join(sorted(x.to_str() for x in variant_valid.unknown_properties))}")
 
-            with PluginLoader(self._variant_pyproject_toml) as loader:
-                build_setup = loader.get_build_setup(self._variant)
-                for build_var in ("cflags", "cxxflags", "cuflags", "objcflags", "fflags", "dflags",
-                                  "valaflags", "rustflags", "cythonflags", "ldflags"):
-                    if build_var in build_setup:
-                        os.environ[build_var.upper()] = (
-                            " ".join((os.environ.get(build_var.upper(), ""),
-                                      *build_setup[build_var]))
-                        )
-
         # run meson setup
         self._configure(reconfigure=reconfigure)
 
