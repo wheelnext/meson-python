@@ -47,7 +47,6 @@ import pyproject_metadata
 from variantlib.api import make_variant_dist_info, validate_variant
 from variantlib.constants import VARIANT_DIST_INFO_FILENAME
 from variantlib.models.variant import VariantProperty, VariantDescription
-from variantlib.plugins.loader import PluginLoader
 from variantlib.pyproject_toml import VariantPyProjectToml
 
 import mesonpy._compat
