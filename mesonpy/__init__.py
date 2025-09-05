@@ -669,9 +669,9 @@ def _validate_config_settings(config_settings: Dict[str, Any]) -> Dict[str, Any]
     # Variant-related setting checks.
     if 'null-variant' in config:
         if 'variant' in config or 'variant-name' in config:
-            raise ConfigError(f'Option "null-variant" is mutually exclusive with "variant" and "variant-name"')
+            raise ConfigError('Option "null-variant" is mutually exclusive with "variant" and "variant-name"')
         if 'variant-label' in config:
-            raise ConfigError(f'Option "null-variant" is mutually exclusive with "variant-label"')
+            raise ConfigError('Option "null-variant" is mutually exclusive with "variant-label"')
 
     return config
 
