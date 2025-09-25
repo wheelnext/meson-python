@@ -11,7 +11,7 @@ requires = [
   'packaging @ https://github.com/wheelnext/packaging/archive/wheel-variants.tar.gz',
   'pyproject-metadata >= 0.9.0',
   'tomli >= 1.0.0; python_version < "3.11"',
-  'variantlib @ https://github.com/wheelnext/variantlib/archive/dev.tar.gz',
+  'variantlib @ https://github.com/wheelnext/variantlib/archive/main.tar.gz',
 ]
 
 [project]
@@ -40,7 +40,7 @@ dependencies = [
   'packaging @ https://github.com/wheelnext/packaging/archive/wheel-variants.tar.gz',
   'pyproject-metadata >= 0.9.0',
   'tomli >= 1.0.0; python_version < "3.11"',
-  'variantlib @ https://github.com/wheelnext/variantlib/archive/dev.tar.gz',
+  'variantlib @ https://github.com/wheelnext/variantlib/archive/main.tar.gz',
 ]
 
 [project.optional-dependencies]
