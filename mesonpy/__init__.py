@@ -44,7 +44,7 @@ import packaging.utils
 import packaging.version
 import pyproject_metadata
 
-from variantlib.api import make_variant_dist_info, validate_variant
+from variantlib.api import make_variant_dist_info, validate_variant, get_variant_label
 from variantlib.constants import VARIANT_DIST_INFO_FILENAME
 from variantlib.models.variant import VariantProperty, VariantDescription
 from variantlib.pyproject_toml import VariantPyProjectToml
@@ -364,10 +364,7 @@ class _WheelBuilder():
         """Wheel name, this includes the basename and tag."""
         name = f'{self._metadata.distribution_name}-{self._metadata.version}-{self.tag}'
         if self._variant is not None:
-            if self._variant_label is not None:
-                name += f'-{self._variant_label}'
-            else:
-                name += f'-{self._variant.hexdigest}'
+            name += f'-{get_variant_label(self._variant, self._variant_label)}'
         return name
 
     @property
